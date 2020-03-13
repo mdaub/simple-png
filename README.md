@@ -46,6 +46,6 @@ for libspng.a (gcc) put a copy of libz.a in simple-png/ and then copy zlib.h and
 To use the bare simple-png functions, include the png.h file in your source code and link zlib and libspng to your executable
 To use the drawing functions include drawing.h as well.
 
-## example
+## Example
 
 An example program using Simple PNG is included in example.c and will be built by defualt in Makefile and Makefile.win to example.exe. example.exe is included as a precompiled binary for Windows x86
