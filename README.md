@@ -17,9 +17,9 @@ in the root directory of the project.
 
 ### CMake Build options
 
-BUILD_EXAMPLES: builds example files
-BUILD_ZLIB: build zlib from source (on by default in windows)
-LINK_ZLIB_RUNTIME: Windows only, builds spng with the zlib dll symbols
+- BUILD_EXAMPLES: builds example files
+- BUILD_ZLIB: build zlib from source (on by default in windows)
+- LINK_ZLIB_RUNTIME: Windows only, builds spng with the zlib dll symbols
 
 ## Usage
 
