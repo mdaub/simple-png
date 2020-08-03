@@ -26,21 +26,34 @@
 #define __PNG_H
 
 #ifdef __cplusplus
-extern "C" {
+#ifndef SPNG_NO_NAMESPACE
+namespace spng {
+#endif
+    extern "C" {
 #endif
 
 #include <stdio.h>
 #include <stdint.h>
 
-#define _PNG_VERSION "Simple PNG 1.0"
+#define _PNG_VERSION "1.1.0"
 #define _PNG_VERSION_MAJOR 1
 #define _PNG_VERSION_MINOR 1
+
+#if !defined(SPNG_STATIC) && !defined(SPNG_RUNTIME)
+#define SPNG_STATIC
+#endif
+
+#if defined(_WIN32) && defined(SPNG_RUNTIME)
+#define SPNG_IMPORT __declspec(dllimport)
+#else 
+#define SPNG_IMPORT 
+#endif
 
 /* NOTE: (0, 0) is the bottom left hand corner in Simple PNG */
 
 enum
 {
-    _big_endian,
+    _big_endian = 0,
     _little_endian,
     _png_undefined,
     _png_error = EOF
@@ -48,19 +61,19 @@ enum
 
 typedef enum png_color_type
 {
-    png_greyscale        = 0,
-    png_truecolour       = 2,
-    png_colour_palette   = 3,
-    png_greyscale_alpha  = 4,
+    png_greyscale = 0,
+    png_truecolour = 2,
+    png_colour_palette = 3,
+    png_greyscale_alpha = 4,
     png_truecolour_alpha = 6
 } _png_color_type;
 
 typedef enum png_bit_depth
 {
-    png_bd_1  = 1,
-    png_bd_2  = 2,
-    png_bd_4  = 4,
-    png_bd_8  = 8,
+    png_bd_1 = 1,
+    png_bd_2 = 2,
+    png_bd_4 = 4,
+    png_bd_8 = 8,
     png_bd_16 = 16
 } _png_bit_depth;
 
@@ -74,7 +87,7 @@ struct _png_chunk
 {
     uint32_t length;
     char name[4];
-    void *data;
+    void* data;
     uint32_t crc;
 };
 
@@ -91,9 +104,9 @@ struct _png_IHDR_data
 };
 
 /**
- * @brief A struct to hold 
- * 
- */
+    * @brief A struct to hold
+    *
+    */
 typedef struct png_s
 {
     struct _png_chunk IHDR;
@@ -112,47 +125,50 @@ typedef struct png_s
 
 
 /**
- * @brief Creates a png object with the defined parameters
- * 
- * @param width         the width of the image in pixels
- * @param height        the height of the image in pixels
- * @param color_format  specifies the png color format
- * @param bit_depth     specifies the bit depth of the color format
- * @return png_s*  returns NULL and sets errno on error, returns a pointer to the new object on success
- */
-png_s* png_create
+    * @brief Creates a png object with the defined parameters
+    *
+    * @param width         the width of the image in pixels
+    * @param height        the height of the image in pixels
+    * @param color_format  specifies the png color format
+    * @param bit_depth     specifies the bit depth of the color format
+    * @return png_s*  returns NULL and sets errno on error, returns a pointer to the new object on success
+    */
+SPNG_IMPORT png_s* png_create
 (uint32_t height, uint32_t width, _png_color_type color_format, _png_bit_depth bit_depth);
 
 
 /**
- * @brief attempts to write the PNG file define in image to a file
- * 
- * @param image the struct png defining the image
- * @param filename the path to the output file
- * @return int returns EOF on eror, 0 otherwise
- */
-int png_write(png_s*, const char* filename);
+    * @brief attempts to write the PNG file define in image to a file
+    *
+    * @param image the struct png defining the image
+    * @param filename the path to the output file
+    * @return int returns EOF on eror, 0 otherwise
+    */
+SPNG_IMPORT int png_write(png_s*, const char* filename);
 
 /**
- * @brief Sets a pixel to a specified color
- * The color must be of the same format specified when the png was created
- * @param image the png object to modify
- * @param x the x coordinate of the pixel
- * @param y the y coordinate of the pixel
- * @param color the color value in the same format
- * @return int returns 0 on success, EOF on failure and sets errno
- */
-int png_setp(png_s*, uint32_t x, uint32_t y, uint64_t color);
+    * @brief Sets a pixel to a specified color
+    * The color must be of the same format specified when the png was created
+    * @param image the png object to modify
+    * @param x the x coordinate of the pixel
+    * @param y the y coordinate of the pixel
+    * @param color the color value in the same format
+    * @return int returns 0 on success, EOF on failure and sets errno
+    */
+SPNG_IMPORT int png_setp(png_s*, uint32_t x, uint32_t y, uint64_t color);
 
 /**
- * @brief free's the data allocated in a png struct
- * 
- * @param image the png object to free
- */
-void png_free(png_s*);
+    * @brief free's the data allocated in a png struct
+    *
+    * @param image the png object to free
+    */
+SPNG_IMPORT void png_free(png_s*);
 
 
 #ifdef __cplusplus
+#ifndef SPNG_NO_NAMESPACE
+}
+#endif
 }
 #endif
 

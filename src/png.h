@@ -32,15 +32,21 @@ extern "C" {
 #include <stdio.h>
 #include <stdint.h>
 
-#define _PNG_VERSION "Simple PNG 1.0"
+#define _PNG_VERSION "1.1.0"
 #define _PNG_VERSION_MAJOR 1
 #define _PNG_VERSION_MINOR 1
 
 /* NOTE: (0, 0) is the bottom left hand corner in Simple PNG */
 
+#if defined(_WIN32) && defined(SPNG_BUILD_SHARED)
+#define SPNG_EXPORT __declspec(dllexport)
+#else
+#define SPNG_EXPORT
+#endif
+
 enum
 {
-    _big_endian,
+    _big_endian = 0,
     _little_endian,
     _png_undefined,
     _png_error = EOF
@@ -120,7 +126,7 @@ typedef struct png_s
  * @param bit_depth     specifies the bit depth of the color format
  * @return png_s*  returns NULL and sets errno on error, returns a pointer to the new object on success
  */
-png_s* png_create
+SPNG_EXPORT png_s* png_create
 (uint32_t height, uint32_t width, _png_color_type color_format, _png_bit_depth bit_depth);
 
 
@@ -131,7 +137,7 @@ png_s* png_create
  * @param filename the path to the output file
  * @return int returns EOF on eror, 0 otherwise
  */
-int png_write(png_s*, const char* filename);
+SPNG_EXPORT int png_write(png_s*, const char* filename);
 
 /**
  * @brief Sets a pixel to a specified color
@@ -142,14 +148,14 @@ int png_write(png_s*, const char* filename);
  * @param color the color value in the same format
  * @return int returns 0 on success, EOF on failure and sets errno
  */
-int png_setp(png_s*, uint32_t x, uint32_t y, uint64_t color);
+SPNG_EXPORT int png_setp(png_s*, uint32_t x, uint32_t y, uint64_t color);
 
 /**
  * @brief free's the data allocated in a png struct
  * 
  * @param image the png object to free
  */
-void png_free(png_s*);
+SPNG_EXPORT void png_free(png_s*);
 
 
 #ifdef __cplusplus

@@ -43,7 +43,7 @@ int draw_circle(image_s* img, int32_t x, int32_t y, int32_t radius, uint64_t col
         return 0;
     }
     int i, j;
-    uint32_t temp = radius*radius;
+    int32_t temp = radius*radius;
     const int32_t temp_rad = -radius;
     for(i = radius; i >= temp_rad; i--) {
         for(j = temp_rad; j <= radius; j++) {

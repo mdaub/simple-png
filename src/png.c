@@ -127,17 +127,17 @@ png_s* png_create
     /* the extra height bytes is for the filter byte on each scan line */
     if(color_format == 0)
     {
-        data_length = (width * height * bit_depth + 7UL) / 8 + 1 * height;
+        data_length = ((size_t)width * (size_t)height * (size_t)bit_depth + 7UL) / 8UL + 1UL * (size_t)height;
     }
     else if(color_format == 2)
     {
-        data_length = (width * height * bit_depth * 3) / 8 + height;
+        data_length = ((size_t)width * (size_t)height * (size_t)bit_depth * 3UL) / 8UL + (size_t)height;
     }
     if(color_format == 3)
     {
-        data_length = (width * height * bit_depth + 7) / 8 + height;
-        png_struct->PLTE.length = (1 << bit_depth) * 3;
-        png_struct->PLTE.data = calloc((1 << bit_depth) * 4, 1);
+        data_length = ((size_t)width * (size_t)height * (size_t)bit_depth + 7UL) / 8UL + (size_t)height;
+        png_struct->PLTE.length = (1U << bit_depth) * 3;
+        png_struct->PLTE.data = calloc((1ULL << bit_depth) * 4UL, 1UL);
         if(png_struct->PLTE.data == NULL)
         {
             free(png_struct);
@@ -147,11 +147,11 @@ png_s* png_create
     }
     else if(color_format == 4)
     {
-        data_length = width * height * bit_depth / 4 + height;
+        data_length = (size_t)width * (size_t)height * (size_t)bit_depth / 4 + (size_t)height;
     }
     else if(color_format == 6)
     {
-        data_length = width * height * bit_depth / 2 + height;
+        data_length = (size_t)width * (size_t)height * (size_t)bit_depth / 2 + (size_t)height;
     }
     png_struct->data = (uint8_t*)calloc(data_length, 1);
     png_struct->data_size = data_length;
@@ -179,7 +179,7 @@ int png_write(png_s* image, const char* filename)
         errno = EINVAL;
         return EOF;
     }
-    /* open file in binary mode so \n isn't turned into \r\n */
+    /* open file in binary mode so line ending characters are unchanged */
     FILE* fp = fopen(filename, "wb");
     if(fp == NULL)
     {
@@ -248,9 +248,9 @@ int png_write(png_s* image, const char* filename)
         int num_colors = 1 << image->IHDR_data.bit_depth;
         for(i = 0; i < num_colors; i++)
         {
-            if(get_endianness() == _little_endian) swap_endianness((char*)image->PLTE.data + 4 * i, 4);
-            image->PLTE.crc = part_crc32((char*)image->PLTE.data + 1 + 4 * i, 3UL, image->PLTE.crc);
-            fwrite((char*)image->PLTE.data + 1 + 4 * i, 3UL, 1UL, fp);
+            if(get_endianness() == _little_endian) swap_endianness((char*)image->PLTE.data + 4UL * (size_t)i, 4);
+            image->PLTE.crc = part_crc32((char*)image->PLTE.data + 1UL + 4UL * (size_t)i, 3UL, image->PLTE.crc);
+            fwrite((char*)image->PLTE.data + 1UL + 4UL * (size_t)i, 3UL, 1UL, fp);
         }
         image->PLTE.crc ^= 0xffffffffL;
         if(get_endianness() == _little_endian) swap_endianness(&image->PLTE.crc, 4UL);
@@ -263,13 +263,19 @@ int png_write(png_s* image, const char* filename)
     int ret, flush;
     unsigned have;
     z_stream strm;
-    unsigned char out[CHUNK];
+    /* Heap Allocate out to avoid stack overflow */
+    unsigned char* out = calloc(CHUNK, sizeof(unsigned char));
+    if (out == NULL)
+        return -1;
     strm.zalloc = Z_NULL;
     strm.zfree = Z_NULL;
     strm.opaque = Z_NULL;
     ret = deflateInit(&strm, Z_DEFAULT_COMPRESSION);
-    if(ret != Z_OK)
+    if (ret != Z_OK)
+    {
+        free(out);
         return ret;
+    }
     uint32_t length = 0;
     uint32_t crc = IDAT_CRC;
     long length_pos = ftell(fp);
@@ -310,6 +316,7 @@ int png_write(png_s* image, const char* filename)
             if(fwrite(out, 1, have, fp) != have || ferror(fp))
             {
                 (void)deflateEnd(&strm);
+                free(out);
                 return EOF; /* Z_ERRNO */
             }
             length += have;
@@ -320,6 +327,7 @@ int png_write(png_s* image, const char* filename)
         
     }
     while(flush != Z_FINISH);
+    free(out);
     /* overwrite the length placeholder to reflect the true value */
     fseek(fp, length_pos, SEEK_SET);
     if( get_endianness() == _little_endian) swap_endianness(&length, 4UL);
@@ -395,9 +403,9 @@ int png_setp(png_s* image, uint32_t x, uint32_t y, uint64_t color)
     {
         int pixels_per_byte = 8 / depth;
         uint8_t bitmask = (1U << depth) - 1;
-        size_t index = (width + pixels_per_byte - 1) / pixels_per_byte + 1;
+        size_t index = ((size_t)width + (size_t)pixels_per_byte - 1) / (size_t)pixels_per_byte + 1UL;
         index = index * y + x / pixels_per_byte + 1;
-        size_t shift = ( pixels_per_byte - 1 - x % pixels_per_byte ) * depth;
+        size_t shift = ((size_t)pixels_per_byte - 1UL - (size_t)x % pixels_per_byte ) * (size_t)depth;
         data[index] &= ~(bitmask << shift);
         data[index] |= ((uint8_t)color & bitmask) << shift;
     }
@@ -405,7 +413,7 @@ int png_setp(png_s* image, uint32_t x, uint32_t y, uint64_t color)
     {
         int bytes_per_pixel = ndepth * depth / 8;
         if(get_endianness() == _little_endian) swap_endianness(&color, bytes_per_pixel);
-        size_t index = (width * bytes_per_pixel + 1) * y + x * bytes_per_pixel + 1;
+        size_t index = ((size_t)width * (size_t)bytes_per_pixel + 1UL) * (size_t)y + (size_t)x * (size_t)bytes_per_pixel + 1UL;
         int i;
         for(i = 0; i < bytes_per_pixel; i++)
         {

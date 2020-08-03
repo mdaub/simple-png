@@ -1,0 +1,12 @@
+.vs
+.vscode
+CMakeFiles
+CMakeCache.txt
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.cmake
+*.png
+*.dir
+CMakeClean*
