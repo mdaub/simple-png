@@ -1,12 +1,19 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
 
-project(simple-png LANGUAGES C)
+project(simple-png LANGUAGES C CXX)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-option(LINK_ZLIB_STATIC "Windows Only | Links zlibstatic directly into spng" ON)
-option(BUILD_EXAMPLES "Builds the example files" ON)
-option(BUILD_ZLIB "Build from zlib source or link from system" ON)
+# build zlib by defualt on windows
+if(MSVC)
+    set(BUILD_ZLIB_DEFAULT ON)
+else()
+    set(BUILD_ZLIB_DEFAULT OFF)
+endif()
+
+option(LINK_ZLIB_RUNTIME "Windows Only | uses runtime version of zlib" OFF)
+option(BUILD_EXAMPLES "Builds the example files" OFF)
+option(BUILD_ZLIB "Build from zlib source or link from system" ${BUILD_ZLIB_DEFAULT})
 
 
 
@@ -55,12 +62,12 @@ if(BUILD_ZLIB)
     target_include_directories(spng_runtime PRIVATE ./zlib/)
 endif()
 
-if(LINK_ZLIB_STATIC)
-    set(ZLIB_LIB ${ZLIB_STATIC})
-else()
+if(LINK_ZLIB_RUNTIME)    
     set(ZLIB_LIB ${ZLIB_SHARED})
     target_compile_definitions(spng_static PRIVATE ZLIB_DLL)
     target_compile_definitions(spng_runtime PRIVATE ZLIB_DLL)
+else()
+    set(ZLIB_LIB ${ZLIB_STATIC})
 endif()
 
 # system specific links, names and defines
@@ -80,8 +87,17 @@ if(BUILD_EXAMPLES)
     set(EXECUTABLE_OUTPUT_PATH bin/)
     add_executable(spng_example examples/example.c)
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT spng_example)
+    set_property(TARGET spng_example PROPERTY FOLDER examples)
     set_target_properties(spng_example PROPERTIES OUTPUT_NAME example)
     set_target_properties(spng_example PROPERTIES PROJECT_LABEL example)
     target_include_directories(spng_example PUBLIC ../include)
     target_link_libraries(spng_example spng_static ${ZLIB_LIB})
+
+    add_executable(spng_mandelbrot examples/mandelbrot.cpp )
+    set(CMAKE_CXX_STANDARD 14)
+    set_property(TARGET spng_mandelbrot PROPERTY FOLDER examples)
+    set_target_properties(spng_mandelbrot PROPERTIES OUTPUT_NAME mandelbrot)
+    set_target_properties(spng_mandelbrot PROPERTIES PROJECT_LABEL mandelbrot)
+    target_include_directories(spng_mandelbrot PUBLIC ../include)
+    target_link_libraries(spng_mandelbrot spng_static ${ZLIB_LIB})
 endif()
