@@ -25,15 +25,15 @@
 #ifndef __PNG_H
 #define __PNG_H
 
+#include <stdio.h>
+#include <stdint.h>
+
 #ifdef __cplusplus
 #ifndef SPNG_NO_NAMESPACE
 namespace spng {
 #endif
     extern "C" {
 #endif
-
-#include <stdio.h>
-#include <stdint.h>
 
 #define _PNG_VERSION "1.1.0"
 #define _PNG_VERSION_MAJOR 1

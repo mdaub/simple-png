@@ -79,9 +79,9 @@ int draw_ring(image_s* img, int32_t x, int32_t y, int32_t outer_radius, int32_t 
         return draw_circle(img, x, y, outer_radius, col);
     }
     int i, j;
-    const uint32_t outer_square = outer_radius * outer_radius;
-    const uint32_t inner_square = inner_radius * inner_radius;
-    const int32_t temp_radius = -outer_radius;
+    const int outer_square = outer_radius * outer_radius;
+    const int inner_square = inner_radius * inner_radius;
+    const int temp_radius = -outer_radius;
     for(i = outer_radius; i >= temp_radius; i--) {
         for(j = temp_radius; j <= outer_radius; j++) {
             if(i*i + j*j <= outer_square && i*i + j*j >= inner_square) {

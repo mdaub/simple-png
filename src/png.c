@@ -281,7 +281,7 @@ int png_write(png_s* image, const char* filename)
     long length_pos = ftell(fp);
     fwrite(&length, 4UL, 1UL, fp);
     fwrite("IDAT", 1, 4UL, fp);
-    size_t num_bytes = image->data_size;
+    uInt num_bytes = (uInt)image->data_size;
     /* PNG IDAT and deflate have a maximum chunk size so we have to loop through and do at most CHUNK bytes at a time */
     do
     {
