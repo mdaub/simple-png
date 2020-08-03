@@ -3,49 +3,51 @@ A simple way to generate and draw PNG images in C
 
 ## Dependencies
 
-simple-png requires make, gcc and zlib.
-It can also be built with Visual Studio build tools if that is preffered.
-zlib can be found in most Linux distribution's package managers but will have to be built from source in Windows:
+simple-png requires cmake, zlib along with standard system build tools.
+zlib can be found in most Linux distribution's package managers but will have to be built from source in Windows, and is included as a submodule.
 https://github.com/madler/zlib
 
 ## Building
 
-### Linux
-
-Install zlib (Debian / Ubuntu):
-
+To generate the build files run:
 ```
-# apt install zlib1g-dev
+cmake .
 ```
+in the root directory of the project.
 
-Install make and gcc, then cd into the simple-png download directory simply run make.
+### CMake Build options
 
-```
-$ make
-```
-
-And it should create libspng.a in your current directory
-
-### Windows
-
-Precompiled libraries are included for 64 bit GCC (libspng.a) and x86 MSVC (spng.lib)
-
-Download zlib and follow the build instructions for WIN32
-If you plan to use zlib with gcc make sure you build it with the gcc makefile, and vice versa for MSVC
-
-To build spng.lib (MSVC):
-```
-set LIB=%LIB%;path_to_zlib_dir;
-set INCLUDE=%INCLUDE%;path_to_zlib_dir;
-nmake -f Makefile.win
-```
-for libspng.a (gcc) put a copy of libz.a in simple-png/ and then copy zlib.h and zconf.h to simple-png/include and run make
+BUILD_EXAMPLES: builds example files
+BUILD_ZLIB: build zlib from source (on by default in windows)
+LINK_ZLIB_RUNTIME: Windows only, builds spng with the zlib dll symbols
 
 ## Usage
 
-To use the bare simple-png functions, include the png.h file in your source code and link zlib and libspng to your executable
-To use the drawing functions include drawing.h as well.
+To use the bare simple-png functions, include the spng/png.h file in your source code and link zlib and spng to your executable
+To use the drawing functions include spng/drawing.h.
+Before including png.h or drawing.h define SPNG_STATIC or SPNG_RUNTIME according to which version of the library you will be using.
 
-## Example
+### Usage example
 
-An example program using Simple PNG is included in example.c and will be built by defualt in Makefile and Makefile.win to example.exe. example.exe is included as a precompiled binary for Windows x86
+Include the headers located in the include directory
+```
+#define SPNG_STATIC
+#include "spng/spng.h"
+#include "spng/drawing.h"
+```
+Note: if using C++ all simple png functions will be under the namespace spng. The namespace can be disabled by defining SPNG_NO_NAMESPACE before including the headers.
+
+Create a png_s pointer 
+```
+png_s* image = png_create(width, height, color_format_enum, bit_depth_enum);
+```
+You can modify the raw image data by accessing the data member inside png_s, by using the png_setp function and by using the drawing.h functions to draw strings and shapes.
+```
+png_setp(image, x, y, 0xffffffff);
+prints(image, "Hello World!", x, y, scale, color);
+```
+After modifying the image write it with png_write and free the png_s with png_free
+```
+png_write(image, output_file);
+png_free(image);
+```
