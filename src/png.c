@@ -513,9 +513,10 @@ int get_chunk(FILE* fp, uint32_t* chunk_length, uint8_t** buffer, size_t* buff_l
     /* CRC check */
     if (!_ignore_crc_error)
     {
-        uint32_t* crc = (uint32_t*)(*buffer + *chunk_length + 4);
-        if (get_endianness() == _little_endian) swap_endianness(crc, 4);
-        if(*crc != _crc32(*buffer, (size_t)*chunk_length + 4ULL))
+        uint32_t crc = _crc32(*buffer, (size_t)*chunk_length + 4ULL);
+        /* swap the byte order of computed CRC so the original data is not modified */
+        if (get_endianness() == _little_endian) swap_endianness(&crc, 4);
+        if(crc != *(uint32_t*)(*buffer + *chunk_length + 4))
         {
             fseek(fp, -((long)ret + 4), SEEK_CUR);
             SPNG_ERRNO = SPNG_CRC_ERROR;
