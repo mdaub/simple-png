@@ -37,17 +37,47 @@ Include the headers located in the include directory
 ```
 Note: if using C++ all simple png functions will be under the namespace spng. The namespace can be disabled by defining SPNG_NO_NAMESPACE before including the headers.
 
-Create a png_s pointer 
+Create a png_s pointer and check for errors
 ```
 png_s* image = png_create(width, height, color_format_enum, bit_depth_enum);
+if(image == NULL){
+  puts(spngErrorStr(SPNG_ERRNO));
+  return 0;
+}
 ```
 You can modify the raw image data by accessing the data member inside png_s, by using the png_setp function and by using the drawing.h functions to draw strings and shapes.
 ```
 png_setp(image, x, y, 0xffffffff);
 prints(image, "Hello World!", x, y, scale, color);
 ```
-After modifying the image write it with png_write and free the png_s with png_free
+After modifying the image write it with png_write and free the png_s with png_free, remebering to check for errors
 ```
-png_write(image, output_file);
+int ret = png_write(image, output_file);
+if(ret != SPNG_OK){
+  puts(spngErrorStr(SPNG_ERRNO));
+}
+png_free(image);
+```
+
+### Opening an existing image
+
+Open an existing image using the png_open function and check for errors
+```
+png_s* image = png_open("existingImage.png");
+if(image == NULL){
+  puts(spngErrorStr(SPNG_ERRNO);
+}
+```
+After opening the image you can write any changes you want, or read pixel data with png_getp
+```
+uint64_t colour;
+png_getp(image, x, y, &colour);
+```
+Then, like described above, write it and free it using png_write and png_free
+```
+int ret = png_write(image, output_file);
+if(ret != SPNG_OK){
+  puts(spngErrorStr(SPNG_ERRNO));
+}
 png_free(image);
 ```
