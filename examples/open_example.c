@@ -43,9 +43,9 @@ int main(void)
 	prints(image, "red removed from image", (image->width - msg_len * 2 * SPNG_CHARACTER_WIDTH) / 2, image->height/2, 2, 0xff0000);
 	
 	/* write image and check if it was successful */
-	if (png_write(image, filename) != SPNG_OK)
+	if (png_write(image, "examples/graph_modified.png") != SPNG_OK)
 	{
-		fprintf(stderr, "Error writing file '%s': %s\n", filename, spngErrorStr(SPNG_ERRNO));
+		fprintf(stderr, "Error writing file '%s': %s\n", "examples/graph_modified.png", spngErrorStr(SPNG_ERRNO));
 	}
 	/* free allocated data */
 	png_free(image);
