@@ -25,6 +25,7 @@ int main(void)
 		fprintf(stderr, "Error opening file '%s': %s\n", filename, spngErrorStr(SPNG_ERRNO));
 		return 0;
 	}
+	else printf("Opened file '%s' successfully.\n", filename);
 	for (unsigned int y = 0; y < image->height; y++)
 	{
 		for (unsigned int x = 0; x < image->width; x++)
@@ -42,11 +43,13 @@ int main(void)
 	int msg_len = strlen("red removed from image");
 	prints(image, "red removed from image", (image->width - msg_len * 2 * SPNG_CHARACTER_WIDTH) / 2, image->height/2, 2, 0xff0000);
 	
+	const char* filename_out = "examples/graph_modified.png";
 	/* write image and check if it was successful */
-	if (png_write(image, "examples/graph_modified.png") != SPNG_OK)
+	if (png_write(image, filename_out) != SPNG_OK)
 	{
 		fprintf(stderr, "Error writing file '%s': %s\n", "examples/graph_modified.png", spngErrorStr(SPNG_ERRNO));
 	}
+	else printf("Sent image to '%s'\n", filename_out);
 	/* free allocated data */
 	png_free(image);
 	return 0;
