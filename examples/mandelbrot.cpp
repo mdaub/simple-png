@@ -34,8 +34,8 @@ int main(void)
     spng::png_s* mdb_image = png_create(1920, 1080, spng::png_truecolour_alpha, spng::png_bd_8);
     if(mdb_image == NULL)
     {
-        std::cerr << "Error creating png image." << std::endl;
-        return -1;
+        std::cerr << "Error creating png image: " << spng::spngErrorStr(spng::SPNG_ERRNO) << std::endl;
+        return 0;
     }
     /* 
      * Determines when to stop testing if a point is in the set.
@@ -84,7 +84,14 @@ int main(void)
         }
     }
     /* save the image and free it */
-    spng::png_write(mdb_image, "mandelbrot.png");
+    if (spng::png_write(mdb_image, "examples/mandelbrot.png") != SPNG_OK)
+    {
+        std::cerr << "Error writing mandelbrot.png: " << spng::spngErrorStr(spng::SPNG_ERRNO) << std::endl;
+    }
+    else
+    {
+        std::cout << "Sent image to examples/mandelbrot.png." << std::endl;
+    }
     spng::png_free(mdb_image);
     return 0;
 }

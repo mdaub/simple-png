@@ -36,11 +36,9 @@ set(EXECUTABLE_OUTPUT_PATH bin)
 set(SPNG_SRC 
             include/spng/png.h
             include/spng/drawing.h
-            src/png.h 
             src/crc32.h 
             src/crc32table.h 
-            src/codepage-437.h
-            src/drawing.h 
+            src/codepage-437.h 
             src/crc32.c 
             src/png.c 
             src/drawing.c )
@@ -90,14 +88,16 @@ if(BUILD_EXAMPLES)
     set_property(TARGET spng_example PROPERTY FOLDER examples)
     set_target_properties(spng_example PROPERTIES OUTPUT_NAME example)
     set_target_properties(spng_example PROPERTIES PROJECT_LABEL example)
-    target_include_directories(spng_example PUBLIC ../include)
     target_link_libraries(spng_example spng_static ${ZLIB_LIB})
+
+    add_executable(open_example examples/open_example.c)
+    set_property(TARGET open_example PROPERTY FOLDER examples)
+    target_link_libraries(open_example spng_static ${ZLIB_LIB})
 
     add_executable(spng_mandelbrot examples/mandelbrot.cpp )
     set(CMAKE_CXX_STANDARD 14)
     set_property(TARGET spng_mandelbrot PROPERTY FOLDER examples)
     set_target_properties(spng_mandelbrot PROPERTIES OUTPUT_NAME mandelbrot)
     set_target_properties(spng_mandelbrot PROPERTIES PROJECT_LABEL mandelbrot)
-    target_include_directories(spng_mandelbrot PUBLIC ../include)
     target_link_libraries(spng_mandelbrot spng_static ${ZLIB_LIB})
 endif()

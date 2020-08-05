@@ -30,7 +30,10 @@
 #define WHITE 0xffffff
 #define BLACK 0x000000
 
-/* NOTE: (0, 0) is the bottom left hand corner in Simple PNG */
+/* NOTE: (0, 0) is the bottom left hand corner in Simple PNG by default 
+ * You can change the inversion of x and y by setting the corresponding 
+ * fields in the png_s struct
+ */
 
 int main(void)
 {   
@@ -41,17 +44,21 @@ int main(void)
     png_s* image = png_create(width, height, png_truecolour, png_bd_8);
     if(image == NULL)
     {
-        puts("Error creating png struct.");
+        fprintf(stderr, "Error creating png image: %s\n", spngErrorStr(SPNG_ERRNO));
         return 0;
     }
+    else puts("Sent image to examples/example.png");
     /* data is allocated with calloc so default color will be 0 */
     draw_rectangle(image, 5, 5, width - 1 - 5, height - 1 - 5, 0x606060);
     /* codepage 437 is a 9*16 font */
-    prints(image, "Hello World! \x03", width / 2 - (strlen("Hello World!  ") / 2) * CHARACTER_WIDTH * 2, height/2 + CHARACTER_HEIGHT * 2, 2, WHITE);
-    png_write(image, "example.png");
+    prints(image, "Hello World! \x03", width / 2 - (strlen("Hello World!  ") / 2) * SPNG_CHARACTER_WIDTH * 2, height/2 + SPNG_CHARACTER_HEIGHT * 2, 2, WHITE);
+    if (png_write(image, "examples/example.png") != SPNG_OK)
+    {
+        fprintf(stderr, "Error writing 'examples/example.png': %s\n", spngErrorStr(SPNG_ERRNO));
+    }
     png_free(image);
-    width = CHARACTER_WIDTH * 32;
-    height = CHARACTER_HEIGHT * 8;
+    width = SPNG_CHARACTER_WIDTH * 32;
+    height = SPNG_CHARACTER_HEIGHT * 8;
     image = png_create(width, height, png_truecolour, png_bd_8);
     if(image == NULL)
     {
@@ -63,11 +70,14 @@ int main(void)
     {
         for(j = 0; j < 32; j++)
         {
-            /* NOTE: (0, 0) is the bottom left hand corner in Simple PNG */
-            printc(image, i*32 + j, CHARACTER_WIDTH * j, height - 1 - CHARACTER_HEIGHT * i, 1, WHITE);
+            printc(image, i*32 + j, SPNG_CHARACTER_WIDTH * j, height - 1 - SPNG_CHARACTER_HEIGHT * i, 1, WHITE);
         }
     }
-    png_write(image, "example2.png");
+    if (png_write(image, "examples/example2.png") != SPNG_OK)
+    {
+        fprintf(stderr, "Error writing 'examples/example2.png': %s\n", spngErrorStr(SPNG_ERRNO));
+    }
+    else puts("Sent image to examples/example2.png");
     png_free(image);
     return 0;
 }

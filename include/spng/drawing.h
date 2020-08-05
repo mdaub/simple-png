@@ -21,26 +21,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __DRAWING_H
-#define __DRAWING_H
+#ifndef _SPNG_DRAWING_H
+#define _SPNG_DRAWING_H
+
+/* included up here to avoid namespace issues */
+#include <stdint.h>
 
 #ifdef __cplusplus
+#ifndef SPNG_NO_NAMESPACE
 namespace spng {
-extern "C" {
+#endif
+    extern "C" {
 #endif
 
-#define CHARACTER_HEIGHT 16
-#define CHARACTER_WIDTH 9
-
-#if !defined(SPNG_STATIC) && !defined(SPNG_RUNTIME)
-#define SPNG_STATIC
-#endif
-
-#if defined(_WIN32) && defined(SPNG_RUNTIME)
-#define SPNG_IMPORT __declspec(dllimport)
-#else 
-#define SPNG_IMPORT 
-#endif
+#define SPNG_CHARACTER_HEIGHT 16
+#define SPNG_CHARACTER_WIDTH 9
 
 /* Adapt drawing algorithms for Simple PNG */
 #include "png.h"
@@ -56,9 +51,9 @@ typedef png_s image_s;
  * @param y center y coordinate
  * @param r the radius of the circle
  * @param colour the colour of the circle
- * @return int returns 0 on success, -1 otherwise
+ * @return int returns SPNG_ERROR and set SPNG_ERRNO on error, SPNG_OK on success
  */
-SPNG_IMPORT int draw_circle(image_s* img, int32_t x, int32_t y, int32_t r, uint64_t colour);
+SPNG_EXPORT int draw_circle(image_s* img, int32_t x, int32_t y, int32_t r, uint64_t colour);
 
 /**
  * @brief Draws a ring
@@ -69,9 +64,9 @@ SPNG_IMPORT int draw_circle(image_s* img, int32_t x, int32_t y, int32_t r, uint6
  * @param ro outer radius
  * @param ri inner radius
  * @param colour the colour
- * @return int returns 0 on success, -1 otherwise
+ * @return int returns SPNG_ERROR and set SPNG_ERRNO on error, SPNG_OK on success
  */
-SPNG_IMPORT int draw_ring(image_s* img, int32_t x, int32_t y, int32_t ro, int32_t ri, uint64_t colour);
+SPNG_EXPORT int draw_ring(image_s* img, int32_t x, int32_t y, int32_t ro, int32_t ri, uint64_t colour);
 
 
 /**
@@ -82,9 +77,9 @@ SPNG_IMPORT int draw_ring(image_s* img, int32_t x, int32_t y, int32_t ro, int32_
  * @param y upper left y coordinate
  * @param s side length in pixels
  * @param colour colour of the square
- * @return int returns 0 on success, -1 otherwise
+ * @return int returns SPNG_ERROR and set SPNG_ERRNO on error, SPNG_OK on success
  */
-SPNG_IMPORT int draw_square(image_s* img, int32_t x, int32_t y, int32_t s, uint64_t colour);
+SPNG_EXPORT int draw_square(image_s* img, int32_t x, int32_t y, int32_t s, uint64_t colour);
 
 /**
  * @brief Draws a rectangle
@@ -95,9 +90,9 @@ SPNG_IMPORT int draw_square(image_s* img, int32_t x, int32_t y, int32_t s, uint6
  * @param x1 x of the second corner
  * @param y1 y of the second corner
  * @param colour the colour of the rectangle
- * @return int returns 0 on success, -1 otherwise
+ * @return int returns SPNG_ERROR and set SPNG_ERRNO on error, SPNG_OK on success
  */
-SPNG_IMPORT int draw_rectangle(image_s* img, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint64_t colour);
+SPNG_EXPORT int draw_rectangle(image_s* img, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint64_t colour);
 
 /**
  * @brief Draws a line with Besenham's line algorithm
@@ -109,9 +104,9 @@ SPNG_IMPORT int draw_rectangle(image_s* img, int32_t x0, int32_t y0, int32_t x1,
  * @param y1 the y coordinate of the end of the line
  * @param width the width of the line
  * @param colour colour of the line
- * @return int returns 0 on success, -1 otherwise
+ * @return int returns SPNG_ERROR and set SPNG_ERRNO on error, SPNG_OK on success
  */
-SPNG_IMPORT int draw_line(image_s* img, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t width, uint64_t colour);
+SPNG_EXPORT int draw_line(image_s* img, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint32_t width, uint64_t colour);
 
 /**
  * @brief Prints a character on an image (codepage-437)
@@ -122,9 +117,9 @@ SPNG_IMPORT int draw_line(image_s* img, int32_t x0, int32_t y0, int32_t x1, int3
  * @param y the upper left y coordinate of the character
  * @param size the point size of the font
  * @param colour the colour of the character
- * @return int returns 0 on success, -1 otherwise
+ * @return @return int returns SPNG_ERROR and set SPNG_ERRNO on error, SPNG_OK on success
  */
-SPNG_IMPORT int printc(image_s* img, int character, int32_t x, int32_t y, uint32_t size, uint64_t colour);
+SPNG_EXPORT int printc(image_s* img, int character, int32_t x, int32_t y, uint32_t size, uint64_t colour);
 
 /**
  * @brief Prints a string on an image (codepage-437)
@@ -135,12 +130,15 @@ SPNG_IMPORT int printc(image_s* img, int character, int32_t x, int32_t y, uint32
  * @param y the upper left y coordinate of the first character
  * @param size the point size of the font
  * @param colour the colour of the characters
- * @return int returns 0 on success, -1 otherwise
+ * @return @return int returns SPNG_ERROR and set SPNG_ERRNO on error, SPNG_OK on success
  */
-SPNG_IMPORT int prints(image_s* img, const char* str, int32_t x, int32_t y, uint32_t size, uint64_t colour);
+SPNG_EXPORT int prints(image_s* img, const char* str, int32_t x, int32_t y, uint32_t size, uint64_t colour);
 
 #ifdef __cplusplus
-} }
+#ifndef SPNG_NO_NAMESPACE
+}
+#endif
+}
 #endif
 
 #endif /* ifndef __DRAWING_H */

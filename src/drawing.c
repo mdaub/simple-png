@@ -21,7 +21,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "drawing.h"
+#include "../include/spng/drawing.h"
 #include "codepage-437.h"
 
 #define ABS(A) ((A) < 0 ? -(A) : (A));
@@ -37,11 +37,13 @@
  * @return int returns 0 on success, -1 otherwise
  */
 int draw_circle(image_s* img, int32_t x, int32_t y, int32_t radius, uint64_t col) {
-    if(img == NULL) return -1;
-    if(radius == 0) {
-        png_setp(img, x, y, col);
-        return 0;
+    if (img == NULL)
+    {
+        SPNG_ERRNO = SPNG_BAD_PARAM;
+        return SPNG_ERROR;
     }
+    if(radius == 0)
+        return png_setp(img, x, y, col);
     int i, j;
     int32_t temp = radius*radius;
     const int32_t temp_rad = -radius;
@@ -52,7 +54,7 @@ int draw_circle(image_s* img, int32_t x, int32_t y, int32_t radius, uint64_t col
             }
         }
     }
-    return 0;
+    return SPNG_OK;
 }
 
 /**
@@ -67,13 +69,18 @@ int draw_circle(image_s* img, int32_t x, int32_t y, int32_t radius, uint64_t col
  * @return int returns 0 on success, -1 otherwise
  */
 int draw_ring(image_s* img, int32_t x, int32_t y, int32_t outer_radius, int32_t inner_radius, uint64_t col){
-    if(img == NULL) return -1;
+    if (img == NULL)
+    {
+        SPNG_ERRNO = SPNG_BAD_PARAM;
+        return SPNG_ERROR;
+    }
     if(outer_radius == 0) {
         png_setp(img, x, y, col);
-        return 0;
+        return SPNG_OK;
     }
     if(inner_radius > outer_radius){
-        return 0;
+        SPNG_ERRNO = SPNG_BAD_PARAM;
+        return SPNG_ERROR;
     }
     if(inner_radius == 0){
         return draw_circle(img, x, y, outer_radius, col);
@@ -89,7 +96,7 @@ int draw_ring(image_s* img, int32_t x, int32_t y, int32_t outer_radius, int32_t 
             }
         }
     }
-    return 0;
+    return SPNG_OK;
 }
 
 /**
@@ -103,14 +110,18 @@ int draw_ring(image_s* img, int32_t x, int32_t y, int32_t outer_radius, int32_t 
  * @return int returns 0 on success, -1 otherwise
  */
 int draw_square(image_s* img, int32_t x, int32_t y, int32_t side_length, uint64_t col) {
-    if(img == NULL) return -1;
+    if (img == NULL)
+    {
+        SPNG_ERRNO = SPNG_BAD_PARAM;
+        return SPNG_ERROR;
+    }
     int i, j;
     for(i = 0; i < side_length; i++) {
         for(j = 0; j < side_length; j++) {
             png_setp(img, i + x, j + y, col);
         }
     }
-    return 0;
+    return SPNG_OK;
 }
 
 /**
@@ -126,7 +137,11 @@ int draw_square(image_s* img, int32_t x, int32_t y, int32_t side_length, uint64_
  */
 int draw_rectangle(image_s* img, int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint64_t col)
 {
-    if(img == NULL) return -1;
+    if (img == NULL)
+    {
+        SPNG_ERRNO = SPNG_BAD_PARAM;
+        return SPNG_ERROR;
+    }
     if(x1 < x0) 
     {
         int32_t temp = x0;
@@ -147,7 +162,7 @@ int draw_rectangle(image_s* img, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
             png_setp(img, i, j, col);
         }
     }
-    return 0;
+    return SPNG_OK;
 }
 
 /**
@@ -164,7 +179,11 @@ int draw_rectangle(image_s* img, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
  */
 int draw_line(image_s* img, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint32_t width, uint64_t col) {
     /* Besenham's line drawing algorithm based line drawing function */
-    if(img == NULL) return -1;
+    if (img == NULL)
+    {
+        SPNG_ERRNO = SPNG_BAD_PARAM;
+        return SPNG_ERROR;
+    }
     enum {
         QUAD1 = 1,
         QUAD2 = 2,
@@ -227,7 +246,7 @@ int draw_line(image_s* img, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint
             }
         }
     }
-    return 0;
+    return SPNG_OK;
 }
 
 /**
@@ -242,7 +261,11 @@ int draw_line(image_s* img, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint
  * @return int returns 0 on success, -1 otherwise
  */
 int printc(image_s* img, int input, int32_t x, int32_t y, uint32_t font_size, uint64_t col) {
-    if(img == NULL) return -1;
+    if (img == NULL)
+    {
+        SPNG_ERRNO = SPNG_BAD_PARAM;
+        return SPNG_ERROR;
+    }
     int i, j;
     for(i = 0; i < 18; i++) {
         for(j = 0; j < 8; j++) {
@@ -252,7 +275,7 @@ int printc(image_s* img, int input, int32_t x, int32_t y, uint32_t font_size, ui
             }
         }
     }
-    return 0;
+    return SPNG_OK;
 }
 
 /**
@@ -264,10 +287,14 @@ int printc(image_s* img, int input, int32_t x, int32_t y, uint32_t font_size, ui
  * @param y the upper left y coordinate of the first character
  * @param size the point size of the font
  * @param colour the colour of the characters
- * @return int returns 0 on success, -1 otherwise
+ * @return int returns SPNG_ERROR and set SPNG_ERRNO on error, number of characters printed on success
  */
 int prints(image_s* img, const char* input, int32_t x, int32_t y, uint32_t font_size, uint64_t col) {
-    if(img == NULL) return -1;
+    if (img == NULL)
+    {
+        SPNG_ERRNO = SPNG_BAD_PARAM;
+        return SPNG_ERROR;
+    }
     int i;
     for(i = 0; input[i] != '\0'; i++) {
         printc(img, input[i], x + i*9*font_size, y, font_size, col);
