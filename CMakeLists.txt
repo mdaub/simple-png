@@ -36,10 +36,12 @@ set(EXECUTABLE_OUTPUT_PATH bin)
 set(SPNG_SRC 
             include/spng/png.h
             include/spng/drawing.h
+            include/spng/colour.h
             src/crc32.h 
             src/crc32table.h 
             src/codepage-437.h 
             src/crc32.c 
+            src/colour.c
             src/png.c 
             src/drawing.c )
 
