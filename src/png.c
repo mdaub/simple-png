@@ -28,27 +28,45 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <ctype.h>
 
 #include <zlib.h>
+
+#if defined(_DEBUG) && !defined(DEBUG)
+#undef _DEBUG
+#define DEBUG
+#elif !defined(NDEBUG) && !defined(DEBUG)
+#undef NDEBUG
+#define DEBUG
+#endif
 
 /* max number of bytes to write in a IDAT chunk */
 #define CHUNK 16384
 
 #define ABS(A) ((A) < 0 ? -(A) : (A))
 
-#define _png_crc32 0xedb88320UL
-#define _png_crc32_init 0xffffffffL
-#define _png_chunk_IEND (struct _png_chunk){0ULL, {'I', 'E', 'N', 'D'}, NULL, _crc32("IEND", 4)}
-#define _png_IHDR_data_size 13UL
+/* Size of IHDR chunk */
+#define _png_IHDR_data_size 13ULL
 
-#if defined(_DEBUG) && !defined(DEBUG)
-#undef _DEBUG
-#define DEBUG
-#elif defined(NDEBUG) && !defined(DEBUG)
-#undef NDEBUG
-#define DEBUG
+/* CRC constants */
+#define _png_crc32 0xedb88320U
+#define _png_crc32_init 0xffffffffU
+
+/* precomputed CRCs */
+#define IDAT_CRC 0xca50f9e1U
+#define PLTE_CRC 0xb45776aaU
+
+/* windows file binary mode */
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#define SET_FILE_BINARY(x) { int _fd = _fileno(x); _setmode(_fd, _O_BINARY); }
+#else 
+#define SET_FILE_BINARY(x)
 #endif
 
+/* enumeration of endianness */
 enum endianness
 {
     _big_endian = 0,
@@ -56,11 +74,21 @@ enum endianness
     _png_undefined,
 };
 
+/* enumeration of the scanline filter methods */
+enum filter_method
+{
+    png_filter_none = 0,
+    png_filter_sub,
+    png_filter_up,
+    png_filter_average,
+    png_filter_paeth
+};
+
 /* Function Prototypes */
 void swap_endianness(void* ptr, size_t size);
-int get_chunk(FILE* fp, uint32_t* frame_length, uint8_t** buffer, size_t* buff_len);
+int get_chunk(FILE* fp, uint32_t* chunk_length, uint8_t** buffer, size_t* buff_len);
 int png_allocate(png_s* image);
-int png_inflate(FILE* source, uint32_t input_size, uint8_t** buffer, size_t* buff_size, uint8_t* output, size_t output_size);
+int png_inflate(FILE* fp, uint32_t chunk_size, uint8_t* output, size_t output_size);
 void png_free_chunks(png_s* image);
 
 /* png.c global variables */
@@ -118,42 +146,43 @@ const char* spngErrorStr(int spng_errno)
 
 /**
  * @brief Creates a png object with the defined parameters
- * 
+ *
  * @param width the width of the image in pixels
  * @param height the height of the image in pixels
  * @param colour_format specifies the png colour format
- * @param bit_depth specifies the bit depth of the colour format
- * @return png_s* returns NULL and sets SPNG_ERRNO on error, returns a new png_s* on success
+ * @return png_s* returns NULL and sets SPNG_ERRNO on error, new png image struct on success
  */
 png_s* png_create
-(uint32_t width, uint32_t height, _png_colour_type colour_format, _png_bit_depth bit_depth)
+(uint32_t width, uint32_t height, png_colour_format colour_format)
 {
+    int colour_type = colour_format & 0xf;
+    int bit_depth = colour_format >> 4;
     /* check for bad colour format and bit depth combinations */
-    if(colour_format == 0 && (bit_depth != 1 && bit_depth != 2 && bit_depth != 4 && bit_depth != 8 && bit_depth != 16)){
+    if(colour_type == 0 && (bit_depth != 1 && bit_depth != 2 && bit_depth != 4 && bit_depth != 8 && bit_depth != 16)){
         SPNG_ERRNO = SPNG_BAD_PARAM;
         return NULL;
     }
-    else if(colour_format == 2 && (bit_depth != 8 && bit_depth != 16))
+    else if(colour_type == 2 && (bit_depth != 8 && bit_depth != 16))
     {
         SPNG_ERRNO = SPNG_BAD_PARAM;
         return NULL;
     }
-    else if(colour_format == 3 && (bit_depth != 1 && bit_depth != 2 && bit_depth != 4 && bit_depth != 8))
+    else if(colour_type == 3 && (bit_depth != 1 && bit_depth != 2 && bit_depth != 4 && bit_depth != 8))
     {
         SPNG_ERRNO = SPNG_BAD_PARAM;
         return NULL;
     }
-    else if(colour_format == 4 && (bit_depth != 8 && bit_depth != 16))
+    else if(colour_type == 4 && (bit_depth != 8 && bit_depth != 16))
     {
         SPNG_ERRNO = SPNG_BAD_PARAM;
         return NULL;
     }
-    else if(colour_format == 6 && (bit_depth != 8 && bit_depth != 16))
+    else if(colour_type == 6 && (bit_depth != 8 && bit_depth != 16))
     {
         SPNG_ERRNO = SPNG_BAD_PARAM;
         return NULL;
     }
-    else if(colour_format !=0 && colour_format != 2 && colour_format != 3 && colour_format != 4 && colour_format != 6)
+    else if(colour_type != 0 && colour_type != 2 && colour_type != 3 && colour_type != 4 && colour_type != 6)
     {
         SPNG_ERRNO = SPNG_BAD_PARAM;
         return NULL;
@@ -170,11 +199,11 @@ png_s* png_create
         SPNG_ERRNO = SPNG_MEM_ERROR;
         return NULL;
     }
-    png_struct->IHDR_data = (struct _png_IHDR_data){width, height, bit_depth, colour_format, 0, 0, 0};
+    /* initialize data members */
+    png_struct->IHDR_data = (struct _png_IHDR_data){width, height, bit_depth, colour_type, 0, 0, 0};
     png_struct->IHDR = (struct _png_chunk){13ULL, {'I', 'H', 'D', 'R'}, &(png_struct->IHDR_data), 0ULL};
     png_struct->PLTE = (struct _png_chunk){0ULL , {'P', 'L', 'T', 'E'}, NULL, 0ULL};
     png_struct->IDAT = (struct _png_chunk){0ULL , {'I', 'D', 'A', 'T'}, NULL, 0ULL};
-    png_struct->IEND = _png_chunk_IEND;
     png_struct->_invert_x = 0;
     png_struct->_invert_y = 1;
     png_struct->width = width;
@@ -187,10 +216,10 @@ png_s* png_create
 
     png_struct->num_extra_chunks = 0;
     png_struct->num_extra_allocated = 0;
-    png_struct->extra_chunks = 0;
+    png_struct->extra_chunks = NULL;
 
     /* computes data helpful for changing colours of pixels */
-    int ndepth = colour_format == png_greyscale || colour_format == png_colour_palette ? 1 : colour_format == png_greyscale_alpha ? 2 : colour_format == png_truecolour ? 3 : 4;
+    int ndepth = colour_type == png_greyscale || colour_type == png_colour_palette ? 1 : colour_type == png_greyscale_alpha ? 2 : colour_type == png_truecolour ? 3 : 4;
     png_struct->bytes_per_pixel = ndepth * png_struct->bit_depth / 8;
     png_struct->pixels_per_byte = 8 / bit_depth;
     png_struct->bitmask = (1U << bit_depth) - 1;
@@ -212,12 +241,16 @@ png_s* png_create
  */
 png_s* png_open(const char* filename)
 {
+#ifdef DEBUG
+    printf("\n**** %s(%s) ****\n", __FUNCTION__, filename);
+#endif
     FILE* fp = fopen(filename, "rb");
     if (fp == NULL)
     {
         SPNG_ERRNO = SPNG_IO_ERROR;
         return NULL;
     }
+    SET_FILE_BINARY(fp) /* Forces windows not to convert line endings */
     png_s* image = (png_s*)malloc(sizeof(png_s));
     if (image == NULL)
     {
@@ -230,7 +263,6 @@ png_s* png_open(const char* filename)
     image->IHDR = (struct _png_chunk){ 13ULL, {'I', 'H', 'D', 'R'}, &(image->IHDR_data), 0ULL };
     image->PLTE = (struct _png_chunk){ 0ULL , {'P', 'L', 'T', 'E'}, NULL, 0ULL };
     image->IDAT = (struct _png_chunk){ 0ULL , {'I', 'D', 'A', 'T'}, NULL, 0ULL };
-    image->IEND = _png_chunk_IEND;
     image->_invert_x = 0;
     image->_invert_y = 1;
     image->filename = filename;
@@ -256,9 +288,9 @@ png_s* png_open(const char* filename)
     if (fread(data, 1, 8, fp) != 8 || strncmp("\x89PNG\x0d\x0a\x1a\x0a", (const char*)data, 8))
     {
         fclose(fp);
+        free(image->extra_chunks);
         free(image);
         free(data);
-        free(image->extra_chunks);
         SPNG_ERRNO = SPNG_BAD_FILE;
         return NULL;
     }
@@ -283,7 +315,7 @@ png_s* png_open(const char* filename)
         if (strncmp((const char*)data, "IHDR", 4) == 0)
         {
             /* read the IHDR chunk fields */
-            if(get_endianness() == _little_endian) swap_endianness(data + 4, 4);
+            if (get_endianness() == _little_endian) swap_endianness(data + 4, 4);
             memcpy(&(image->width), data + 4, 4);
             image->IHDR_data.width = image->width;
 
@@ -294,16 +326,16 @@ png_s* png_open(const char* filename)
             image->IHDR_data.bit_depth = data[12];
             image->bit_depth = (int)data[12];
             image->IHDR_data.colour_type = data[13];
-            image->colour_format = (int)data[13];
+            image->colour_format = (int)data[13] | (int)data[12] << 4;
             image->IHDR_data.compression_method = data[14];
             image->IHDR_data.filter_method = data[15];
             image->IHDR_data.interlace_method = data[16];
             image->swapped = 0;
 
             /* computes data helpful for changing colours of pixels */
-            int colour_format = image->colour_format;
+            int colour_format = image->IHDR_data.colour_type;
             int ndepth = colour_format == png_greyscale || colour_format == png_colour_palette ? 1 : colour_format == png_greyscale_alpha ? 2 : colour_format == png_truecolour ? 3 : 4;
-            image->bytes_per_pixel = (ndepth * image->bit_depth + 7)/ 8;
+            image->bytes_per_pixel = (ndepth * image->bit_depth + 7) / 8;
             image->pixels_per_byte = 8 / image->bit_depth;
             image->bitmask = (1U << image->bit_depth) - 1;
             image->row_size = (size_t)image->width * (size_t)image->bytes_per_pixel + 1;
@@ -318,10 +350,7 @@ png_s* png_open(const char* filename)
         }
         else if (strncmp((const char*)data, "PLTE", 4) == 0)
         {
-            image->PLTE.name[0] = 'P';
-            image->PLTE.name[1] = 'L';
-            image->PLTE.name[2] = 'T';
-            image->PLTE.name[3] = 'E';
+            /* png_allocate should have allocated PLTE.data already */
             if (image->PLTE.data == NULL)
             {
                 fclose(fp);
@@ -332,9 +361,11 @@ png_s* png_open(const char* filename)
             }
             memcpy(image->colours, data + 4, chunk_size);
         }
+        else if (strncmp((const char*)data, "tIME", 4) == 0);
         else if (strncmp((const char*)data, "IDAT", 4) == 0)
         {
-            if (png_inflate(fp, chunk_size, &data, &data_length, image->data, image->data_size)
+            /* uncompress the data */
+            if(png_inflate(fp, chunk_size, image->data, image->data_size)
                 != SPNG_OK)
             {
                 fclose(fp);
@@ -409,6 +440,8 @@ png_s* png_open(const char* filename)
                 image->data[row_offset] = png_filter_none;
             }
         }
+        /* break on IEND */
+        else if (strncmp((const char*)data, "IEND", 4) == 0) break;
         /* preserve any unknown chunks */
         else
         {
@@ -474,18 +507,29 @@ png_s* png_open(const char* filename)
  */
 int get_chunk(FILE* fp, uint32_t* chunk_length, uint8_t** buffer, size_t* buff_len)
 {
+    /* check for bad parameters */
     if (ferror(fp) || buffer == NULL || chunk_length == NULL || buff_len == NULL)
     {
         SPNG_ERRNO = SPNG_BAD_PARAM;
         return SPNG_ERROR;
     }
     /* read the chunk length */
-    size_t ret = fread(chunk_length, 1, 4, fp);
+    unsigned char chunk_header[8];
+    size_t ret = fread(chunk_header, 1, 8, fp);
+    *chunk_length = *(uint32_t*)chunk_header;
     if(get_endianness() == _little_endian) swap_endianness(chunk_length, 4);
-    if (ret != 4ULL || ferror(fp))
+    if (ret != 8ULL || ferror(fp))
     {
         fseek(fp, -(long)ret, SEEK_CUR);
         SPNG_ERRNO = SPNG_IO_ERROR;
+        return SPNG_ERROR;
+    }
+    /* check that the chunk name is valid BEFORE allocating memory */
+    if (!isalpha(chunk_header[4]) || !isalpha(chunk_header[5]) ||
+        !isalpha(chunk_header[6]) || !isalpha(chunk_header[7]))
+    {
+        fseek(fp, -(long)ret, SEEK_CUR);
+        SPNG_ERRNO = SPNG_BAD_FILE;
         return SPNG_ERROR;
     }
     /* Reallocate the buffer if necessary */
@@ -502,11 +546,17 @@ int get_chunk(FILE* fp, uint32_t* chunk_length, uint8_t** buffer, size_t* buff_l
         *buffer = temp_buffer;
         *buff_len = (size_t)*chunk_length + 8ULL;
     }
-    /* read the chunk data */
-    ret = fread(*buffer, 1, (size_t)*chunk_length + 8ULL, fp);
-    if (ret != (size_t)*chunk_length + 8ULL || ferror(fp))
+    /* copy chunk name */
+    memcpy(*buffer, chunk_header + 4, 4);
+    if (strncmp((const char*)*buffer, "IDAT", 4) == 0)
     {
-        fseek(fp, -((long)ret + 4), SEEK_CUR);
+        return SPNG_OK; /* IDAT reading will be handled by png_inflate */
+    }
+    /* read the chunk data */
+    ret = fread(*buffer + 4, 1, (size_t)*chunk_length + 4ULL, fp);
+    if (ret != (size_t)*chunk_length + 4ULL || ferror(fp))
+    {
+        fseek(fp, -((long)ret + 8), SEEK_CUR);
         SPNG_ERRNO = SPNG_IO_ERROR;
         return SPNG_ERROR;
     }
@@ -523,8 +573,10 @@ int get_chunk(FILE* fp, uint32_t* chunk_length, uint8_t** buffer, size_t* buff_l
             return SPNG_ERROR;
         }
     }
+    
     return SPNG_OK;
 }
+
 
 /**
  * @brief ignores crc errors on the next png_open call
@@ -554,52 +606,46 @@ int png_write(png_s* image, const char* filename)
     {
         return EOF;
     }
+    SET_FILE_BINARY(fp) /* forces windows not to change line endings */
     /* PNG signature */
     fputs("\x89PNG\r\n\x1A\n", fp);
 
     /******************************** IHDR CHUNK ********************************/
-    if(get_endianness() == _little_endian && !image->swapped)
+    
+    /* width and height are swapped before the CRC
+     * so the byte order is the same as in the file 
+     */
+    if (get_endianness() == _little_endian && !image->swapped)
     {
-        /* swap the byte order on fields > 1 byte in size */
-        swap_endianness(&image->IHDR.length, 4UL);
-        swap_endianness(&image->IHDR_data.width, 4UL);
-        swap_endianness(&image->IHDR_data.height, 4UL);
-        /* compute the CRC32 then swap the byte order */
-        image->IHDR.crc = part_crc32((image->IHDR.name), 4UL, _png_crc32_init);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.width), 4UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.height), 4UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.bit_depth), 1UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.colour_type), 1UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.compression_method), 1UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.filter_method), 1UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.interlace_method), 1UL, image->IHDR.crc) ^ 0xffffffffL;
+        swap_endianness(&image->IHDR.length, 4ULL);
+        swap_endianness(&image->IHDR_data.width, 4ULL);
+        swap_endianness(&image->IHDR_data.height, 4ULL);
     }
-    else
-    {
-        /* if the CPU is already big endian then we can just compute the crc32 */
-        image->IHDR.crc = part_crc32((image->IHDR.name), 4UL, _png_crc32_init);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.width), 4UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.height), 4UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.bit_depth), 1UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.colour_type), 1UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.compression_method), 1UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.filter_method), 1UL, image->IHDR.crc);
-        image->IHDR.crc = part_crc32(&(image->IHDR_data.interlace_method), 1UL, image->IHDR.crc) ^ 0xffffffffL;
-    }
+    /* compute the CRC */
+    image->IHDR.crc = part_crc32((image->IHDR.name), 4ULL, _png_crc32_init);
+    image->IHDR.crc = part_crc32(&(image->IHDR_data.width), 4ULL, image->IHDR.crc);
+    image->IHDR.crc = part_crc32(&(image->IHDR_data.height), 4ULL, image->IHDR.crc);
+    image->IHDR.crc = part_crc32(&(image->IHDR_data.bit_depth), 1ULL, image->IHDR.crc);
+    image->IHDR.crc = part_crc32(&(image->IHDR_data.colour_type), 1ULL, image->IHDR.crc);
+    image->IHDR.crc = part_crc32(&(image->IHDR_data.compression_method), 1ULL, image->IHDR.crc);
+    image->IHDR.crc = part_crc32(&(image->IHDR_data.filter_method), 1ULL, image->IHDR.crc);
+    image->IHDR.crc = part_crc32(&(image->IHDR_data.interlace_method), 1ULL, image->IHDR.crc) ^ 0xffffffffU;
+    /* swap the byte order of the CRC */
     if (get_endianness() == _little_endian)
     {
-        swap_endianness(&image->IHDR.crc, 4UL);
+        swap_endianness(&image->IHDR.crc, 4ULL);
     }
-    fwrite(&image->IHDR.length, 4UL, 1UL, fp);
-    fwrite(&image->IHDR.name, 4UL, 1UL, fp);
-    fwrite(&image->IHDR_data.width, 4UL, 1UL, fp);
-    fwrite(&image->IHDR_data.height, 4UL, 1UL, fp);
+    /* write the IHDR chunk */
+    fwrite(&image->IHDR.length, 4ULL, 1ULL, fp);
+    fwrite(&image->IHDR.name, 4ULL, 1ULL, fp);
+    fwrite(&image->IHDR_data.width, 4ULL, 1ULL, fp);
+    fwrite(&image->IHDR_data.height, 4ULL, 1ULL, fp);
     fputc(image->IHDR_data.bit_depth, fp);
     fputc(image->IHDR_data.colour_type, fp);
     fputc(image->IHDR_data.compression_method, fp);
     fputc(image->IHDR_data.filter_method, fp);
     fputc(image->IHDR_data.interlace_method, fp);
-    fwrite(&image->IHDR.crc, 4UL, 1UL, fp);
+    fwrite(&image->IHDR.crc, 4ULL, 1ULL, fp);
 
     int chunks_have_sRGB = 0;
     int chunks_have_gAMA = 0;
@@ -612,42 +658,63 @@ int png_write(png_s* image, const char* filename)
             if (strncmp((const char*)image->extra_chunks[index].name, "gAMA", 4) == 0) chunks_have_gAMA = 1;
             uint32_t length = image->extra_chunks[index].length;
             if (get_endianness() == _little_endian) swap_endianness(&length, 4);
-            fwrite(&length, 1, 4, fp);
-            fwrite(image->extra_chunks[index].name, 1, 4, fp);
-            fwrite(image->extra_chunks[index].data, 1, image->extra_chunks[index].length, fp);
-            fwrite(&(image->extra_chunks[index].crc), 1, 4, fp);
+            fwrite(&length, 1ULL, 4ULL, fp);
+            fwrite(image->extra_chunks[index].name, 1ULL, 4ULL, fp);
+            fwrite(image->extra_chunks[index].data, 1ULL, image->extra_chunks[index].length, fp);
+            fwrite(&(image->extra_chunks[index].crc), 1ULL, 4ULL, fp);
         }
     }
-
+    /* tIME chunk */
+    {
+        time_t t_epoch;
+        time(&t_epoch);
+        struct tm* t = localtime(&t_epoch);
+        t->tm_year += 1900; /* tm_year is in years since 1900, and tIME expects the full number */
+        unsigned char time_chunk[19] =
+        {
+            0, 0, 0, 7,                         /* length */
+            't', 'I', 'M', 'E',                 /* name */
+            t->tm_year >> 8, t->tm_year & 0xff, /* year */
+            t->tm_mon + 1,                      /* month */
+            t->tm_mday,                         /* day */
+            t->tm_hour,                         /* hour */
+            t->tm_min,                          /* minute */
+            t->tm_sec,                          /* second */
+            0, 0, 0, 0                          /* crc */
+        };
+        *(uint32_t*)(time_chunk + 15ULL) = _crc32(time_chunk + 4ULL, 11ULL);
+        if (get_endianness() == _little_endian) swap_endianness(time_chunk + 15ULL, 4ULL);
+        fwrite(time_chunk, 1ULL, 19ULL, fp);
+    }
     /* certain chunks never change so there is no reason to recompute lengths and crc32's */
     /* sRGB CHUNK */
-    if(!chunks_have_sRGB) fwrite("\x00\x00\x00\x01sRGB\x00\xae\xce\x1c\xe9", 1UL, 13UL, fp);
+    if(!chunks_have_sRGB) fwrite("\x00\x00\x00\x01sRGB\x00\xae\xce\x1c\xe9", 1ULL, 13ULL, fp);
     /* gAMA CHUNK */
-    if(!chunks_have_gAMA) fwrite("\x00\x00\x00\x04gAMA\x00\x00\xb1\x8f\x0b\xfc\x61\x05", 1UL, 16UL, fp);
+    if(!chunks_have_gAMA) fwrite("\x00\x00\x00\x04gAMA\x00\x00\xb1\x8f\x0b\xfc\x61\x05", 1ULL, 16ULL, fp);
 
     /******************************** PLTE CHUNK ********************************/
-    if(image->colour_format == png_colour_palette)
+    if(image->IHDR_data.colour_type == png_colour_palette)
     {
         
-        if(get_endianness() == _little_endian && !image->swapped) swap_endianness(&image->PLTE.length, 4UL);
-        fwrite(&image->PLTE.length, 4UL, 1UL, fp);
-        fwrite(&image->PLTE.name, 4UL, 1UL, fp);
-        image->PLTE.crc = 0xb45776aa; /* part_crc32(image->PLTE.name, 4UL, _png_crc32_init); */
+        if(get_endianness() == _little_endian && !image->swapped) swap_endianness(&image->PLTE.length, 4ULL);
+        fwrite(&image->PLTE.length, 4ULL, 1ULL, fp);
+        fwrite(&image->PLTE.name, 4ULL, 1ULL, fp);
+        image->PLTE.crc = PLTE_CRC;
         int i;
         int num_colours = 1 << image->bit_depth;
         for(i = 0; i < num_colours; i++)
         {
-            if(get_endianness() == _little_endian && !image->swapped) swap_endianness((char*)image->PLTE.data + 4UL * (size_t)i, 4);
-            image->PLTE.crc = part_crc32((char*)image->PLTE.data + 1UL + 4UL * (size_t)i, 3UL, image->PLTE.crc);
-            fwrite((char*)image->PLTE.data + 1UL + 4UL * (size_t)i, 3UL, 1UL, fp);
+            if(get_endianness() == _little_endian && !image->swapped) swap_endianness((char*)image->PLTE.data + 4ULL * (size_t)i, 4ULL);
+            image->PLTE.crc = part_crc32((char*)image->PLTE.data + 1ULL + 4ULL * (size_t)i, 3ULL, image->PLTE.crc);
+            fwrite((char*)image->PLTE.data + 1ULL + 4ULL * (size_t)i, 3ULL, 1ULL, fp);
         }
-        image->PLTE.crc ^= 0xffffffffL;
-        if(get_endianness() == _little_endian) swap_endianness(&image->PLTE.crc, 4UL);
-        fwrite(&image->PLTE.crc, 4UL, 1UL, fp);
+        image->PLTE.crc ^= 0xffffffffU;
+        if(get_endianness() == _little_endian) swap_endianness(&image->PLTE.crc, 4ULL);
+        fwrite(&image->PLTE.crc, 4ULL, 1ULL, fp);
     }
 
     /******************************** IDAT CHUNK ********************************/
-    const uint32_t IDAT_CRC = 0xca50f9e1; /* part_crc32("IDAT", 4, _png_crc32_init); */
+    
     /* initialize z_stream */
     int ret, flush;
     unsigned have;
@@ -672,8 +739,8 @@ int png_write(png_s* image, const char* filename)
     uint32_t length = 0;
     uint32_t crc = IDAT_CRC;
     long length_pos = ftell(fp);
-    fwrite(&length, 4UL, 1UL, fp);
-    fwrite("IDAT", 1, 4UL, fp);
+    fwrite(&length, 4ULL, 1ULL, fp);
+    fwrite("IDAT", 1ULL, 4ULL, fp);
     uInt num_bytes = (uInt)image->data_size;
     /* PNG IDAT and deflate have a maximum chunk size so we have to loop through and do at most CHUNK bytes at a time */
     do
@@ -688,25 +755,40 @@ int png_write(png_s* image, const char* filename)
             strm.next_out = out;
             ret = deflate(&strm, flush);
             have = CHUNK - strm.avail_out;
-            /* Finish current chunk and start new IDAT chunk if over size */
-            if(length + have > CHUNK){
+            /* Finish current chunk and start new IDAT 
+            chunk if over size */
+            size_t out_offset = 0;
+            if(length + have >= CHUNK){
+                size_t num_to_write = CHUNK - length;
+                out_offset = num_to_write;
+                /* write the rest of the data to finish the chunk */
+                if (fwrite(out, 1, num_to_write, fp) != num_to_write || ferror(fp))
+                {
+                    (void)deflateEnd(&strm);
+                    free(out);
+                    SPNG_ERRNO = SPNG_IO_ERROR;
+                    return SPNG_ERROR;
+                }
+                have += length - CHUNK;
+                length = CHUNK;
                 /* overwrite the length placeholder to reflect the true value */
                 fseek(fp, length_pos, SEEK_SET);
-                if( get_endianness() == _little_endian) swap_endianness(&length, 4UL);
-                fwrite(&length, 4UL, 1UL, fp);
+                if( get_endianness() == _little_endian) swap_endianness(&length, 4ULL);
+                fwrite(&length, 4ULL, 1ULL, fp);
                 fseek(fp, 0L, SEEK_END); /* return to the end of the file */
-                /* Finish the crc32 by inverting everything at the end */
-                crc ^= 0xffffffffL;
-                if(get_endianness() == _little_endian) swap_endianness(&crc, 4UL);
-                fwrite(&crc, 4UL, 1, fp); 
+                /* Finish the crc32 */
+                crc = part_crc32(out, num_to_write, crc) ^ 0xffffffffU;
+                if(get_endianness() == _little_endian) swap_endianness(&crc, 4ULL);
+                fwrite(&crc, 4ULL, 1ULL, fp); 
                 /* start new IDAT CHUNK */
                 length = 0;
                 crc = IDAT_CRC;
                 length_pos = ftell(fp);
-                fwrite(&length, 4UL, 1UL, fp);
-                fwrite("IDAT", 1, 4UL, fp);
+                fwrite(&length, 4ULL, 1ULL, fp);
+                fwrite("IDAT", 1ULL, 4ULL, fp);
             }
-            if(fwrite(out, 1, have, fp) != have || ferror(fp))
+            /* offset is for IDAT chunks that finish in the middle of the out buffer */
+            if(fwrite(out + out_offset, 1ULL, have, fp) != have || ferror(fp))
             {
                 (void)deflateEnd(&strm);
                 free(out);
@@ -714,7 +796,7 @@ int png_write(png_s* image, const char* filename)
                 return SPNG_ERROR;
             }
             length += have;
-            crc = part_crc32(out, have, crc);
+            crc = part_crc32(out + out_offset, have, crc);
         }
         while(strm.avail_out == 0);
     }
@@ -723,16 +805,16 @@ int png_write(png_s* image, const char* filename)
     free(out);
     /* overwrite the length placeholder to reflect the true value */
     fseek(fp, length_pos, SEEK_SET);
-    if( get_endianness() == _little_endian) swap_endianness(&length, 4UL);
-    fwrite(&length, 4UL, 1UL, fp);
+    if( get_endianness() == _little_endian) swap_endianness(&length, 4ULL);
+    fwrite(&length, 4ULL, 1ULL, fp);
     fseek(fp, 0L, SEEK_END); /* return to the end of the file */
     /* Finish the crc32 by inverting everything at the end */
-    crc ^= 0xffffffffL;
-    if(get_endianness() == _little_endian) swap_endianness(&crc, 4UL);
-    fwrite(&crc, 4UL, 1, fp); 
+    crc ^= 0xffffffffU;
+    if(get_endianness() == _little_endian) swap_endianness(&crc, 4ULL);
+    fwrite(&crc, 4ULL, 1ULL, fp); 
 
     /******************************** IEND CHUNK ********************************/
-    fwrite("\0\0\0\0IEND\xae\x42\x60\x82", 12UL, 1UL, fp);
+    fwrite("\0\0\0\0IEND\xae\x42\x60\x82", 12ULL, 1ULL, fp);
     fclose(fp);
     image->swapped = 1;
     return SPNG_OK;
@@ -747,8 +829,8 @@ int png_write(png_s* image, const char* filename)
 void png_free(png_s* image)
 {
     if(image == NULL) return;
-    if(image->data != NULL) free(image->data);
-    if(image->colours != NULL) free(image->colours);
+    if(image->data) free(image->data);
+    if(image->colours) free(image->colours);
     png_free_chunks(image);
     free(image);
 }
@@ -804,9 +886,9 @@ int png_setp(png_s* image, uint32_t x, uint32_t y, uint64_t colour)
     {
         int pixels_per_byte = image->pixels_per_byte;
         uint8_t bitmask = image->bitmask;
-        size_t index = ((size_t)width + (size_t)pixels_per_byte - 1) / (size_t)pixels_per_byte + 1UL;
-        index = index * y + x / pixels_per_byte + 1;
-        size_t shift = ((size_t)pixels_per_byte - 1UL - (size_t)x % pixels_per_byte ) * (size_t)depth;
+        size_t index = ((size_t)width + (size_t)pixels_per_byte - 1) / (size_t)pixels_per_byte + 1ULL;
+        index = index * y + x / pixels_per_byte + 1ULL;
+        size_t shift = ((size_t)pixels_per_byte - 1ULL - (size_t)x % pixels_per_byte ) * (size_t)depth;
         image->data[index] &= ~(bitmask << shift);
         image->data[index] |= ((uint8_t)colour & bitmask) << shift;
     }
@@ -815,12 +897,12 @@ int png_setp(png_s* image, uint32_t x, uint32_t y, uint64_t colour)
         int bytes_per_pixel = image->bytes_per_pixel;
         /* swap the endianness if necessary */
         if (get_endianness() == _little_endian) swap_endianness(&colour, bytes_per_pixel);
-        size_t index = image->row_size * (size_t)y + (size_t)x * (size_t)bytes_per_pixel +1UL;
+        size_t index = image->row_size * (size_t)y + (size_t)x * (size_t)bytes_per_pixel +1ULL;
         int i;
         for(i = 0; i < bytes_per_pixel; i++)
         {
             image->data[index + i] = colour & 0xff;
-            colour >>= depth;
+            colour >>= 8;
         } 
     }
     return SPNG_OK;
@@ -850,9 +932,9 @@ int png_getp(png_s* image, uint32_t x, uint32_t y, uint64_t* colour)
     {
         int pixels_per_byte = image->pixels_per_byte;
         uint8_t bitmask = image->bitmask;
-        size_t index = ((size_t)width + (size_t)pixels_per_byte - 1) / (size_t)pixels_per_byte + 1UL;
-        index = index * y + x / pixels_per_byte + 1;
-        size_t shift = ((size_t)pixels_per_byte - 1UL - (size_t)x % pixels_per_byte) * (size_t)depth;
+        size_t index = ((size_t)width + (size_t)pixels_per_byte - 1) / (size_t)pixels_per_byte + 1ULL;
+        index = index * y + x / pixels_per_byte + 1ULL;
+        size_t shift = ((size_t)pixels_per_byte - 1ULL - (size_t)x % pixels_per_byte) * (size_t)depth;
         *colour = image->data[index];
         *colour >>= shift;
         *colour &= bitmask;
@@ -861,11 +943,11 @@ int png_getp(png_s* image, uint32_t x, uint32_t y, uint64_t* colour)
     {
         *colour = 0;
         int bytes_per_pixel = image->bytes_per_pixel;
-        size_t index = image->row_size * (size_t)y + (size_t)x * (size_t)bytes_per_pixel + 1UL;
+        size_t index = image->row_size * (size_t)y + (size_t)x * (size_t)bytes_per_pixel + 1ULL;
         int i;
         for (i = 0; i < bytes_per_pixel; i++)
         {
-            *colour <<= depth;
+            *colour <<= 8;
             *colour |= image->data[index + i];
         }
         /* swap the endianness if necessary */
@@ -884,19 +966,19 @@ int png_allocate(png_s* image)
 {
     size_t data_length = 0;
     /* determine the size of data from IHDR data and allocate memory */
-    if (image->colour_format == png_greyscale)
+    if (image->IHDR_data.colour_type == png_greyscale)
     {
-        data_length = ((size_t)image->width * (size_t)image->height * (size_t)image->bit_depth + 7UL) / 8UL + 1UL * (size_t)image->height;
+        data_length = ((size_t)image->width * (size_t)image->height * (size_t)image->bit_depth + 7ULL) / 8ULL + 1ULL * (size_t)image->height;
     }
-    else if (image->colour_format == png_truecolour)
+    else if (image->IHDR_data.colour_type == png_truecolour)
     {
-        data_length = ((size_t)image->width * (size_t)image->height * (size_t)image->bit_depth * 3UL) / 8UL + (size_t)image->height;
+        data_length = ((size_t)image->width * (size_t)image->height * (size_t)image->bit_depth * 3ULL) / 8ULL + (size_t)image->height;
     }
-    if (image->colour_format == png_colour_palette)
+    if (image->IHDR_data.colour_type == png_colour_palette)
     {
-        data_length = ((size_t)image->width * (size_t)image->height * (size_t)image->bit_depth + 7UL) / 8UL + (size_t)image->height;
-        image->PLTE.length = (1U << image->bit_depth) * 3;
-        image->PLTE.data = calloc((1ULL << image->bit_depth) * 4UL, 1UL);
+        data_length = ((size_t)image->width * (size_t)image->height * (size_t)image->bit_depth + 7ULL) / 8ULL + (size_t)image->height;
+        image->PLTE.length = (1UL << image->bit_depth) * 3;
+        image->PLTE.data = calloc((1ULL << image->bit_depth) * 4ULL, 1ULL);
         if (image->PLTE.data == NULL)
         {
             SPNG_ERRNO = SPNG_MEM_ERROR;
@@ -904,11 +986,11 @@ int png_allocate(png_s* image)
         }
         image->colours = image->PLTE.data;
     }
-    else if (image->colour_format == png_greyscale_alpha)
+    else if (image->IHDR_data.colour_type == png_greyscale_alpha)
     {
         data_length = (size_t)image->width * (size_t)image->height * (size_t)image->bit_depth / 4 + (size_t)image->height;
     }
-    else if (image->colour_format == 6)
+    else if (image->IHDR_data.colour_type == 6)
     {
         data_length = (size_t)image->width * (size_t)image->height * (size_t)image->bit_depth / 2 + (size_t)image->height;
     }
@@ -922,22 +1004,28 @@ int png_allocate(png_s* image)
     return SPNG_OK;
 }
 
+
 /**
  * @brief Uses the inflate algorithm (zlib) to uncompress IDAT chunks
- * @param source the file to read the png data from
- * @param input_size the initial read size of the first IDAT chunk
- * @param buffer read buffer for the chunk data
- * @param buff_size the size in bytes of the buffer
- * @param output the output data buffer, usually image->data
- * @param output_size the size in bytes of the output buffer
+ * @param fp the file to read the png data from
+ * @param chunk_size the size of the first IDAT chunk
+ * @param output the output buffer to store the inflated data
+ * @param output_size the size of the output buffer
  * @return int returns SPNG_ERROR and sets SPNG_ERRNO on error, SPNG_OK on success
  */
-int png_inflate(FILE* source, uint32_t input_size, uint8_t** buffer, size_t* buff_size, uint8_t* output, size_t output_size)
+int png_inflate(FILE* fp, uint32_t chunk_size, uint8_t* output, size_t output_size)
 {
     int retval;
     unsigned have;
     z_stream strm;
     size_t index = 0; // points to where the current data is
+    size_t input_size = chunk_size > CHUNK ? chunk_size : CHUNK;
+    uint8_t* input = (uint8_t*)malloc(input_size);
+    if (input == NULL)
+    {
+        SPNG_ERRNO = SPNG_MEM_ERROR;
+        return SPNG_ERROR;
+    };
 
     strm.zalloc = Z_NULL;
     strm.zfree = Z_NULL;
@@ -952,42 +1040,83 @@ int png_inflate(FILE* source, uint32_t input_size, uint8_t** buffer, size_t* buf
     }
     do
     {
-        size_t left = input_size;
+        /* reallocate memory if needed */
+        if (chunk_size > input_size)
+        {
+            uint8_t* temp_input = (uint8_t*)realloc(input, chunk_size);
+            if (temp_input == NULL)
+            {
+                free(input);
+                (void)inflateEnd(&strm);
+                SPNG_ERRNO = SPNG_MEM_ERROR;
+                return SPNG_ERROR;
+            }
+            input = temp_input;
+            input_size = chunk_size;
+        }
+        /* read chunk_size bytes */
+        strm.avail_in = (uInt)fread(input, 1ULL, chunk_size, fp);
+        /* read the crc at the end of the chunk */
+        uint32_t rx_crc;
+        size_t ret = fread(&rx_crc, 1ULL, 4ULL, fp);
+        if (!_ignore_crc_error)
+        {
+            /* calculate the crc of the recieved chunk, starting with the crc for "IDAT" */
+            uint32_t crc = part_crc32(input, chunk_size, IDAT_CRC) ^ 0xffffffffU;
+            if (get_endianness() == _little_endian) swap_endianness(&crc, 4ULL);
+            if (ret != 4 || crc != rx_crc)
+            {
+                SPNG_ERRNO = SPNG_CRC_ERROR;
+                return SPNG_ERROR;
+            }
+        }
+        /* read the next chunk header */
+        unsigned char next_buffer[8];
+        ret = fread(next_buffer, 1ULL, 8ULL, fp);
+        uint32_t next_size = *(uint32_t*)next_buffer;
+        /* if the next chunk is not IDAT unget the data and set next_size to 0 */
+        if (strncmp((const char*)(next_buffer + 4ULL), "IDAT", 4ULL))
+        {
+            fseek(fp, -(long)ret, SEEK_CUR);
+            next_size = 0;
+        }
+        else if (get_endianness() == _little_endian) swap_endianness(&next_size, 4ULL);
+        
+        if (ferror(fp) || strm.avail_in != chunk_size)
+        {
+            (void)inflateEnd(&strm);
+            SPNG_ERRNO = SPNG_IO_ERROR;
+        }
+        if (strm.avail_in == 0)
+        {
+            break;
+        }
+        strm.next_in = input;
+        uInt avail_out;
         do
         {
-            strm.avail_in = (uInt)left > CHUNK ? CHUNK : (uInt)left;
-            strm.next_in = *buffer + 4 + input_size - left;
-            left = left < CHUNK ? 0 : left - CHUNK;
-            if (strm.avail_in == 0)
+            /* run inflate on the chunk */
+            avail_out = (uInt)(output_size - index);
+            strm.avail_out = avail_out;
+            strm.next_out = output + index;
+            retval = inflate(&strm, Z_NO_FLUSH);
+            switch (retval)
             {
-                break;
+            case Z_NEED_DICT:
+                retval = Z_DATA_ERROR;
+            case Z_DATA_ERROR:
+            case Z_MEM_ERROR:
+                (void)inflateEnd(&strm);
+                SPNG_ERRNO = SPNG_INFLATE_ERROR;
+                return SPNG_ERROR;
             }
-            do
-            {
-                strm.avail_out = output_size - index > CHUNK ? CHUNK : (uInt)(output_size - index);
-                strm.next_out = output + index;
-                retval = inflate(&strm, Z_NO_FLUSH);
-                switch (retval)
-                {
-                case Z_NEED_DICT:
-                    retval = Z_DATA_ERROR;
-                case Z_DATA_ERROR:
-                case Z_MEM_ERROR:
-                    (void)inflateEnd(&strm);
-                    SPNG_ERRNO = SPNG_INFLATE_ERROR;
-                    return SPNG_ERROR;
-                }
-                have = CHUNK - strm.avail_out;
-                index += have;
-            } while (strm.avail_out == 0);
+            have = avail_out - strm.avail_out;
+            index += have;
+        } while (strm.avail_out == 0 && avail_out);
+        chunk_size = next_size;
 
-        } while (retval != Z_STREAM_END);
-        
-        if (get_chunk(source, &input_size, buffer, buff_size) != SPNG_OK)
-            return SPNG_ERROR;
-    } while (strncmp((const char*)buffer, "IDAT", 4) == 0);
-    
+    } while (retval != Z_STREAM_END && chunk_size);
+
     (void)inflateEnd(&strm);
     return SPNG_OK;
 }
-

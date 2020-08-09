@@ -35,17 +35,16 @@ namespace spng {
     extern "C" {
 #endif
 
-#define _SPNG_VERSION "1.3.0"
+#define _SPNG_VERSION "1.3.1"
 #define _SPNG_VERSION_MAJOR 1
 #define _SPNG_VERSION_MINOR 3
-#define _SPNG_VERSION_TWEAK 0
-
-/* NOTE: (0, 0) is the bottom left hand corner in Simple PNG */
+#define _SPNG_VERSION_TWEAK 1
 
 #if defined(SPNG_RUNTIME) && defined(SPNG_STATIC)
 #error "Cannot set both SPNG_RUNTIME and SPNG_STATIC"
 #endif
 
+/* Windows DLL export for runtime build on Windows */
 #if defined(_WIN32) && defined(SPNG_BUILD_SHARED)
 #define SPNG_EXPORT __declspec(dllexport)
 #elif defined(_WIN32) && defined(SPNG_RUNTIME) && !defined(SPNG_STATIC)
@@ -69,6 +68,7 @@ namespace spng {
 #define SPNG_DEFLATE_ERROR   (-7) /* issue with zlib deflate algorithm */
 #define SPNG_INFLATE_ERROR   (-8) /* issue with zlib inflate algorithm */
 
+/* Stores error state of SPNG functions */
 extern int SPNG_EXPORT SPNG_ERRNO;
 
 /**
@@ -78,6 +78,10 @@ extern int SPNG_EXPORT SPNG_ERRNO;
  */
 SPNG_EXPORT const char* spngErrorStr(int spng_errno);
 
+/* PNG colour_type bits */
+#define PNG_A 4 /* Alpha */
+#define PNG_C 2 /* Colour*/
+#define PNG_P 1 /* Palette */
 
 /**
  * @brief the different colour formats for png images
@@ -85,12 +89,12 @@ SPNG_EXPORT const char* spngErrorStr(int spng_errno);
 typedef enum png_colour_type
 {
     png_greyscale        = 0,
-    png_truecolour       = 2,
-    png_RGB              = 2,
-    png_colour_palette   = 3,
-    png_greyscale_alpha  = 4,
-    png_truecolour_alpha = 6,
-    png_RGBA             = 6,
+    png_truecolour       = PNG_C,
+    png_RGB              = PNG_C,
+    png_colour_palette   = PNG_C | PNG_P,
+    png_greyscale_alpha  = PNG_A,
+    png_truecolour_alpha = PNG_C | PNG_A,
+    png_RGBA             = PNG_C | PNG_A,
 } _png_colour_type;
 
 /**
@@ -105,22 +109,37 @@ typedef enum png_bit_depth
     png_bd_16 = 16
 } _png_bit_depth;
 
-/**
- * @brief compression levels
+/*
+ * @brief all of the different valid colour formats in a PNG image
  */
-typedef enum png_compression
+typedef enum png_colour_format
 {
-    png_compression_default = 9
-} _png_compression;
+    /* greyscale formats */
+    png_GS1  = (png_bd_1  << 4),                     /* 1 bit greyscale */
+    png_GS2  = (png_bd_2  << 4),                     /* 2 bit greyscale */
+    png_GS4  = (png_bd_4  << 4),                     /* 4 bit greyscale */
+    png_GS8  = (png_bd_8  << 4),                     /* 8 bit greyscale */
+    png_GS16 = (png_bd_16 << 4),                     /* 16 bit greyscale */
 
-enum filter_method
-{
-    png_filter_none = 0,
-    png_filter_sub,
-    png_filter_up,
-    png_filter_average,
-    png_filter_paeth
-};
+    /* greyscale with alpha formats */
+    png_GSA8  = PNG_A | (png_bd_8  << 4),            /*  8 bit greyscale with alpha */
+    png_GSA16 = PNG_A | (png_bd_16 << 4),            /* 16 bit greyscale with alpha */
+
+    /* indexed colour formats */
+    png_2Colour   = PNG_C | PNG_P | (png_bd_1 << 4), /*  2 colour palette */
+    png_4Colour   = PNG_C | PNG_P | (png_bd_2 << 4), /*  4 colour palette */
+    png_16Colour  = PNG_C | PNG_P | (png_bd_4 << 4), /*  16 colour palette */
+    png_256Colour = PNG_C | PNG_P | (png_bd_8 << 4), /* 256 colour palette */
+
+    /* RGB colour formats */
+    png_RGB8  = PNG_C | (png_bd_8  << 4),            /*  8 bit RGB */
+    png_RGB16 = PNG_C | (png_bd_16 << 4),            /* 16 bit RGB */
+
+    /* RGBA colour formats */
+    png_RGBA8  = PNG_C | PNG_A | (png_bd_8  << 4),   /*  8 bit RGBA */
+    png_RGBA16 = PNG_C | PNG_A | (png_bd_16 << 4)    /* 16 bit RGBA */
+} png_colour_format;
+
 
 /**
  * @brief a structure to hold generic chunk information
@@ -153,34 +172,37 @@ struct _png_IHDR_data
  */
 typedef struct png_s
 {
-    /* User changeable fields */
-    int _invert_x, _invert_y;
-    uint32_t* colours;
-    uint8_t* data;
+    /******** User changeable fields ********/
     
-    /* Read ONLY */
-    size_t data_size;
-    uint32_t width, height;
-    int bit_depth;
-    int colour_format;
-    const char* filename;
+    int _invert_x, _invert_y;         /* flag that toggles axis inversion. y is inverted by default */
+    uint32_t* colours;                /* array of RGB8 colours for indexed colour type */
+    uint8_t* data;                    /* raw PNG scanline data */
+    
+    /******** Read ONLY ********/
 
-    /* internal png data structures */
-    struct _png_chunk IHDR;
-    struct _png_IHDR_data IHDR_data;
-    struct _png_chunk PLTE;
-    struct _png_chunk IDAT;
-    struct _png_chunk IEND;
+    size_t data_size;                 /* size of the PNG data */
+    uint32_t width,                   /* width of the image in pixels */
+        height;                       /* height of the image in pixels */
+    int bit_depth;                    /* the bit depth of each colour channel */
+    png_colour_format colour_format;  /* the colour format of the PNG image */
+    const char* filename;             /* filename of the image, for tracking purposes */
 
-    struct _png_chunk* extra_chunks;
-    unsigned int num_extra_allocated;
-    unsigned int num_extra_chunks;
+    /******* PNG internal data  ********/
+    
+    struct _png_chunk IHDR;           /* IHDR chunk */
+    struct _png_IHDR_data IHDR_data;  /* IHDR chunk data */
+    struct _png_chunk PLTE;           /* PLTE chunk */
+    struct _png_chunk IDAT;           /* IDAT chunk */
 
-    /* stored data to reduce computation time */
-    unsigned char bytes_per_pixel;
-    unsigned char pixels_per_byte;
-    unsigned char bitmask;
-    size_t row_size;
+    struct _png_chunk* extra_chunks;  /* list of extra chunks preserved in png_open */
+    unsigned int num_extra_allocated; /* number of extra chunks allocated */
+    unsigned int num_extra_chunks;    /* number of chunks stored in extra_chunks */
+
+    /* useful cached constants */
+    unsigned char bytes_per_pixel;    /* the number of  bytes used by each pixel */
+    unsigned char pixels_per_byte;    /* the number of pixels that can be stored in a byte */
+    unsigned char bitmask;            /* the bitmask for a pixel that is less than 1 byte in size */
+    size_t row_size;                  /* the size in bytes of a single scanline */
 
     /* to keep track if the data fields have changed endianness already */
     int swapped;
@@ -193,11 +215,10 @@ typedef struct png_s
  * @param width the width of the image in pixels
  * @param height the height of the image in pixels
  * @param colour_format specifies the png colour format
- * @param bit_depth specifies the bit depth of the colour format
  * @return png_s* returns NULL and sets SPNG_ERRNO on error, new png image struct on success
  */
 SPNG_EXPORT png_s* png_create
-(uint32_t height, uint32_t width, _png_colour_type colour_format, _png_bit_depth bit_depth);
+(uint32_t width, uint32_t height, png_colour_format colour_format);
 
 /**
  * @brief Creates a png object from a png file

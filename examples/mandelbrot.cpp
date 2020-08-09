@@ -31,7 +31,7 @@
 int main(void)
 {
     /* create an RGBA image with a bit depth of 8 */
-    spng::png_s* mdb_image = png_create(1920, 1080, spng::png_truecolour_alpha, spng::png_bd_8);
+    spng::png_s* mdb_image = png_create(1920, 1080, spng::png_RGBA8);
     if(mdb_image == NULL)
     {
         std::cerr << "Error creating png image: " << spng::spngErrorStr(spng::SPNG_ERRNO) << std::endl;

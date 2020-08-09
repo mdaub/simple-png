@@ -41,7 +41,7 @@ int main(void)
     int width = 500;
     int height = 500;
     /* create a PNG struct with png_truecolor color type and 8 bit depth (24 bits per pixel) */
-    png_s* image = png_create(width, height, png_truecolour, png_bd_8);
+    png_s* image = png_create(width, height, png_RGB8);
     if(image == NULL)
     {
         fprintf(stderr, "Error creating png image: %s\n", spngErrorStr(SPNG_ERRNO));
@@ -59,7 +59,7 @@ int main(void)
     png_free(image);
     width = SPNG_CHARACTER_WIDTH * 32;
     height = SPNG_CHARACTER_HEIGHT * 8;
-    image = png_create(width, height, png_truecolour, png_bd_8);
+    image = png_create(width, height, png_RGB8);
     if(image == NULL)
     {
         puts("Error creating png struct.");
