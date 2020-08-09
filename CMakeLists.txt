@@ -15,7 +15,9 @@ option(LINK_ZLIB_RUNTIME "Windows Only | uses runtime version of zlib" OFF)
 option(BUILD_EXAMPLES "Builds the example files" OFF)
 option(BUILD_ZLIB "Build from zlib source or link from system" ${BUILD_ZLIB_DEFAULT})
 
-
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release")
+endif()
 
 # system specific ZLIB naming
 if(MSVC)
