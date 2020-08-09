@@ -3,13 +3,13 @@ A simple way to generate and modify PNG images in C
 
 ## Why use Simple PNG?
 
-Well quite frankly if you already have another way to create images, there is no reason to switch. The main reason I started this project is to abstract some of the complexity found in other open source software such as libpng, while maintaining a C only interface. If that's what you need then great. If not there are many better options. This project is mostly just a formalization of code I have used for personal projects for simplicity and learning purposes. 
+Well quite frankly if you already have another way to create images, there is no reason to switch. The main reason I started this project is to abstract some of the complexity found in other open source software such as libpng, while maintaining a C only interface. If that's what you need then great. If not there are many better options. This project is mostly just a formalization of code I have used in personal projects for simplicity and learning purposes. 
 
 The source code has been well commented and should be fairly straightforward to follow along and customize provided you have read the PNG standard.
 
 ## Dependencies
 
-simple-png requires cmake, zlib along with standard system build tools for C.
+Simple PNG requires cmake, zlib along with standard system build tools for C.
 zlib can be found in most Linux distribution's package managers but will have to be built from source in Windows, and is included as a submodule.
 https://github.com/madler/zlib
 
@@ -47,7 +47,7 @@ If using C++ all Simple PNG functions will be under the namespace spng. The name
 Include the headers located in the include directory
 ```c
 #define SPNG_STATIC
-#include "spng/spng.h"
+#include "spng/png.h"
 #include "spng/drawing.h"
 ```
 Create a png_s pointer and check for errors. For information about the colour formats PNG images support, see the section about colours.
